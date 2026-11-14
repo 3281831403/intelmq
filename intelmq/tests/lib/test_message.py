@@ -192,6 +192,35 @@ class TestMessageFactory(unittest.TestCase):
         with self.assertRaises(exceptions.InvalidValue):
             report.add('feed.url', '\r\n')
 
+    def test_invalid_value_exception_object(self):
+        """ Test that the object of InvalidValue is the complete message including the type. """
+        report = message.MessageFactory.from_dict({'__type': 'Report',
+                                                   'raw': LOREM_BASE64},
+                                                  harmonization=HARM)
+        with self.assertRaises(exceptions.InvalidValue) as context:
+            # sanitation fails
+            report.add('feed.url', '\r\n')
+        dumped = json.loads(context.exception.object)
+        self.assertEqual(dumped['__type'], 'Report')
+        self.assertEqual(dumped['raw'], LOREM_BASE64)
+        with self.assertRaises(exceptions.InvalidValue) as context:
+            # validation fails
+            report.add('feed.accuracy', ACCURACY_INVALID)
+        dumped = json.loads(context.exception.object)
+        self.assertEqual(dumped['__type'], 'Report')
+        self.assertEqual(dumped['raw'], LOREM_BASE64)
+
+    def test_event_add_invalid_exception_object(self):
+        """ Test that the object of InvalidValue for events contains the Event type. """
+        event = message.MessageFactory.from_dict({'__type': 'Event',
+                                                  'raw': LOREM_BASE64},
+                                                 harmonization=HARM)
+        with self.assertRaises(exceptions.InvalidValue) as context:
+            event.add('source.asn', 0)
+        dumped = json.loads(context.exception.object)
+        self.assertEqual(dumped['__type'], 'Event')
+        self.assertEqual(dumped['raw'], LOREM_BASE64)
+
     def test_report_getitem(self):
         """ Test if report return value in __getitem__(). """
         report = self.new_report()

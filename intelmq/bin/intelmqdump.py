@@ -340,40 +340,56 @@ def main(argv=None):
                 params = defaults.copy()
                 params.update(runtime_config[botid].get("parameters", {}))
                 pipe = pipeline.PipelineFactory.create(logger=logger, pipeline_args=params)
+                if len(answer) == 3:
+                    queue_name = answer[2]
                 try:
                     for i, (key, entry) in enumerate([item for (count, item)
                                                       in enumerate(content.items()) if count in ids]):
-                        if entry['message']:
+                        try:
+                            if not entry['message']:
+                                print('No message here, deleting entry.')
+                                del content[key]
+                                continue
                             msg = copy.copy(entry['message'])  # otherwise the message field gets converted
+                            if entry.get('message_type') == 'base64':
+                                # messages which could not be decoded have been dumped base64-encoded
+                                try:
+                                    msg = json.loads(utils.base64_decode(msg))
+                                except ValueError:
+                                    # no serialized message, but raw data: recover it as report
+                                    msg = {'__type': 'Report', 'raw': entry['message']}
                             if isinstance(msg, dict):
                                 msg = json.dumps(msg)
-                        else:
-                            print('No message here, deleting entry.')
-                            del content[key]
-                            continue
+                            msgtype = json.loads(msg).get('__type')
+                            if msgtype is None:
+                                print(red('Message has no type, cannot recover it. Skipping entry.'))
+                                continue
 
-                        if queue_name is None:
-                            if len(answer) == 3:
-                                queue_name = answer[2]
+                            if queue_name is None:
+                                entry_queue = entry['source_queue']
                             else:
-                                queue_name = entry['source_queue']
-                        if queue_name in pipeline_pipes:
-                            if runtime_config[pipeline_pipes[queue_name]]['group'] == 'Parser' and json.loads(msg)['__type'] == 'Event':
-                                print('Event converted to Report automatically.')
-                                msg = message.Report(message.MessageFactory.unserialize(msg)).serialize()
-                        else:
-                            print(red(f"The given queue '{queue_name}' is not configured. Please retry with a valid queue."))
-                            break
-                        try:
-                            pipe.set_queues(queue_name, 'destination')
-                            pipe.connect()
-                            pipe.send(msg)
-                        except exceptions.PipelineError:
-                            print(red('Could not reinject into queue {}: {}'
-                                      ''.format(queue_name, traceback.format_exc())))
-                        else:
-                            del content[key]
-                            print(green(f'Recovered dump {i}.'))
+                                entry_queue = queue_name
+                            if entry_queue in pipeline_pipes:
+                                if (runtime_config[pipeline_pipes[entry_queue]]['group'] == 'Parser'
+                                        and msgtype == 'Event'):
+                                    print('Event converted to Report automatically.')
+                                    msg = message.Report(message.MessageFactory.unserialize(msg)).serialize()
+                            else:
+                                print(red(f"The given queue '{entry_queue}' is not configured. Please retry with a valid queue."))
+                                break
+                            try:
+                                pipe.set_queues(entry_queue, 'destination')
+                                pipe.connect()
+                                pipe.send(msg)
+                            except exceptions.PipelineError:
+                                print(red('Could not reinject into queue {}: {}'
+                                          ''.format(entry_queue, traceback.format_exc())))
+                            else:
+                                del content[key]
+                                print(green(f'Recovered dump {i}.'))
+                        except Exception:
+                            # keep the entry in the file and continue with the next one
+                            print(red(f'Could not recover entry {key}: {traceback.format_exc()}'))
                 finally:
                     save_file(handle, content)
                 if not content:

@@ -264,14 +264,14 @@ class Message(dict):
             value = self.__sanitize_value(key, value)
             if value is None:
                 if raise_failure:
-                    raise exceptions.InvalidValue(key, old_value, object=bytes(json.dumps(self.iterable), 'utf-8'))
+                    raise exceptions.InvalidValue(key, old_value, object=bytes(json.dumps({'__type': self.__class__.__name__, **self.iterable}), 'utf-8'))
                 else:
                     return False
 
         valid_value = self.__is_valid_value(key, value)
         if not valid_value[0]:
             if raise_failure:
-                raise exceptions.InvalidValue(key, value, reason=valid_value[1], object=bytes(json.dumps(self.iterable), 'utf-8'))
+                raise exceptions.InvalidValue(key, value, reason=valid_value[1], object=bytes(json.dumps({'__type': self.__class__.__name__, **self.iterable}), 'utf-8'))
             else:
                 return False
 

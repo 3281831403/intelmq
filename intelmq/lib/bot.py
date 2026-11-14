@@ -788,9 +788,17 @@ class Bot:
         new_dump_data[timestamp]["traceback"] = error_traceback
 
         if isinstance(message, bytes):
-            # decoding errors
-            new_dump_data[timestamp]["message"] = utils.base64_encode(message)
-            new_dump_data[timestamp]["message_type"] = 'base64'
+            # decoding errors and invalid values
+            try:
+                decoded_message = json.loads(utils.decode(message))
+            except ValueError:
+                # raw data which is no valid JSON, save it base64-encoded
+                new_dump_data[timestamp]["message"] = utils.base64_encode(message)
+                new_dump_data[timestamp]["message_type"] = 'base64'
+            else:
+                # the message itself is valid JSON (e.g. dumped because of an
+                # invalid value), save it as normal message
+                new_dump_data[timestamp]["message"] = decoded_message
         else:
             new_dump_data[timestamp]["message"] = message.serialize()
 

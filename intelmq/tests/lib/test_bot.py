@@ -6,9 +6,14 @@
 """
 Tests the Bot class itself.
 """
+import base64
+import json
+import os
+import tempfile
 import unittest
 
 import intelmq.lib.test as test
+from intelmq.lib import message
 from intelmq.tests.lib import test_parser_bot
 
 
@@ -76,6 +81,59 @@ class TestDummyParserBot(test.BotTestCase, unittest.TestCase):
         self.assertEqual(self.pipe.state['test-bot-input-internal'], [])
         self.assertEqual(self.pipe.state['test-bot-input'], [])
         self.assertEqual(self.pipe.state['test-bot-output'], [])
+
+    def _dump_and_read_entry(self, message_to_dump):
+        """
+        Call Bot._dump_message with the given message and return the written
+        dump file's only entry.
+        """
+        self.prepare_bot(prepare_source_queue=False)
+        self.bot.testing = False
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self.bot.logging_path = tmpdir
+            self.bot._dump_message(['Traceback (most recent call last):',
+                                    'Exception: test'],
+                                   message=message_to_dump)
+            with open(os.path.join(tmpdir, 'test-bot.dump')) as handle:
+                dump = json.load(handle)
+        self.assertEqual(len(dump), 1)
+        entry = next(iter(dump.values()))
+        self.assertEqual(entry['bot_id'], 'test-bot')
+        self.assertEqual(entry['source_queue'], self.bot.source_queue)
+        return entry
+
+    def test_dump_message_invalid_value(self):
+        """
+        A message dumped because of an invalid value is valid JSON and saved
+        as normal message (including the type), not base64-encoded.
+        """
+        entry = self._dump_and_read_entry(b'{"__type": "Event", "source.asn": 0, "raw": "dGVzdA=="}')
+        self.assertNotIn('message_type', entry)
+        self.assertEqual(entry['message'],
+                         {'__type': 'Event', 'source.asn': 0, 'raw': 'dGVzdA=='})
+
+    def test_dump_message_decoding_error(self):
+        """
+        Raw data which could not be decoded is dumped base64-encoded.
+        """
+        entry = self._dump_and_read_entry(b'foo\xc9bar')
+        self.assertEqual(entry['message_type'], 'base64')
+        self.assertEqual(base64.b64decode(entry['message']), b'foo\xc9bar')
+
+    def test_dump_message_other_exception(self):
+        """
+        A message dumped because of any other exception is saved serialized,
+        including the type.
+        """
+        event = message.MessageFactory.from_dict({'__type': 'Event',
+                                                  'raw': 'dGVzdA==',
+                                                  'feed.name': 'test-feed'})
+        entry = self._dump_and_read_entry(event)
+        self.assertNotIn('message_type', entry)
+        dumped = json.loads(entry['message'])
+        self.assertEqual(dumped['__type'], 'Event')
+        self.assertEqual(dumped['raw'], 'dGVzdA==')
+        self.assertEqual(dumped['feed.name'], 'test-feed')
 
 
 if __name__ == '__main__':  # pragma: no cover

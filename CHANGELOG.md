@@ -16,6 +16,9 @@ Please refer to the [NEWS](NEWS.md) for a list of changes which have an affect o
 ### Configuration
 
 ### Core
+- `intelmq.lib.message`: Include the message type (`__type`) in the `object` of `InvalidValue` exceptions, so that dumped messages are complete.
+- `intelmq.lib.bot`:
+  - `_dump_message`: Save messages which are valid JSON (e.g. dumped because of an invalid value) as normal message instead of base64-encoded. Only raw data which is no valid JSON (decoding errors) is saved base64-encoded.
 
 ### Development
 
@@ -42,11 +45,18 @@ Please refer to the [NEWS](NEWS.md) for a list of changes which have an affect o
 ### Packaging
 
 ### Tests
+- `intelmq.tests.lib.test_bot`: New tests for `Bot._dump_message` covering messages dumped because of invalid values, decoding errors and other exceptions.
+- `intelmq.tests.lib.test_message`: New tests on the `object` of `InvalidValue` exceptions.
+- `intelmq.tests.bin.test_intelmqdump`: New tests for recovering dumps (including skipping broken entries) and for listing, showing and deleting dumps written by older IntelMQ versions.
 - `intelmq.tests.bots.parsers.openphish.test_parser_commercial`: Replace dummy key with more obvious dummy key, generate raw from input (PR#2665 by Sebastian Wagner, fixes #2663).
 - `intelmq.tests.bots.experts.gethostbyname.test_expert`: Update IP address (PR#2697 by Sebastian Wagner).
 - `intelmq.lib.test`: Support comparing messages with regular expressions, reducing the workload to adapt to frequently changing externally controlled data like AS names and IP addresses (PR#2700 by Sebastian Wagner).
 
 ### Tools
+- `intelmq.bin.intelmqdump`:
+  - Recover entries individually: a broken entry is skipped and kept in the dump file, all other entries are recovered as usual.
+  - Recover base64-encoded raw data (decoding errors) as report and only recover messages which have a type, converting events to reports before injecting them into parser queues.
+  - Use every entry's own source queue for recovery if no queue is given explicitly.
 - `intelmq.lib.bot_debugger`:  Optionally read input messages from stdin instead of parameter value (PR#2678 by Sebastian Wager).
 
 ### Contrib
